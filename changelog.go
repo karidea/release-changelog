@@ -11,8 +11,9 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
+	"strings"
 
+	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/machinebox/graphql"
 )
 
@@ -139,10 +140,10 @@ var repo string
 var registry string
 var tag string
 var targetCommitish string
-var query string
 var pr int
 var commit string
 var dryRun bool
+var kafkaTopic string
 
 func init() {
 	flag.StringVar(&repo, "repo", "", "Specify single Github repo to check (required)")
@@ -151,9 +152,9 @@ func init() {
 	flag.StringVar(&tag, "tag", "", "Specify release tag name (e.g. v1.0.2)")
 	flag.StringVar(&targetCommitish, "targetRef", "", "Specify target ref oid to tag")
 	flag.IntVar(&pr, "pr", 0, "List a PRs commits")
-	flag.StringVar(&query, "query", "", "Query Github repos to check (e.g. API or UI)")
 	flag.StringVar(&commit, "commit", "master", "Specify commit ref oid to base everything off of (default: master)")
 	flag.BoolVar(&dryRun, "dry-run", false, "Show what the release would look like w/o publishing")
+	flag.StringVar(&kafkaTopic, "kafka-topic", "", "Specify kafka topic to subscribe to")
 }
 
 func main() {
@@ -175,6 +176,36 @@ func main() {
 	}
 
 	githubToken := os.Getenv("GITHUB_TOKEN")
+	bootstrapServers := os.Getenv("KAFKA_BOOTSTRAP_SERVERS")
+
+	if len(bootstrapServers) > 0 && len(kafkaTopic) > 0 {
+		c, errConsumer := kafka.NewConsumer(&kafka.ConfigMap{
+			"bootstrap.servers": bootstrapServers,
+			"group.id":          "release-changelog",
+			"auto.offset.reset": "latest",
+		})
+
+		if errConsumer != nil {
+			log.Fatal("Failed to create new consumer")
+		}
+
+		c.Subscribe(kafkaTopic, nil)
+
+		fmt.Println("Subscribed to " + kafkaTopic + "and waiting for message")
+		for {
+			msg, err := c.ReadMessage(-1)
+			if err == nil {
+				if strings.Contains(string(msg.Value), repo) {
+					fmt.Printf("\n%q\n", string(msg.Value))
+					fmt.Printf("%s has been published\n", repo)
+					break
+				}
+			}
+		}
+
+		c.Unsubscribe()
+		c.Close()
+	}
 
 	if len(tag) == 0 && len(repo) != 0 {
 		name, err := getNpmPackageName(githubToken, owner, repo)
@@ -199,10 +230,6 @@ func main() {
 	}
 
 	if pr > 0 {
-		if repo == "" {
-			log.Fatal("Need to provide repo to list pr commits")
-		}
-
 		repository, err := getRepositoryPullRequest(githubToken, owner, repo, pr)
 		if err != nil {
 			log.Fatal(err)
@@ -235,46 +262,21 @@ func main() {
 
 		os.Exit(0)
 	}
+}
 
-	fmt.Println(owner + "/" + repo)
-
-	if !Exists(owner + "/" + repo) {
-		cmd := exec.Command("git",
-			"clone",
-			"--bare",
-			"git@github.com:"+owner+"/"+repo,
-			owner+"/"+repo,
-		)
-		err = cmd.Run()
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-	cmd := exec.Command("git",
-		"fetch",
-		"origin",
-		"development:development",
-		"master:master",
-	)
-	cmd.Dir = owner + "/" + repo
-	err = cmd.Run()
+func getLatestVersion(registry, name string) (string, error) {
+	url := registry + "/" + name
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			}}}
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	cmd = exec.Command("git",
-		"--no-pager",
-		"log",
-		"--pretty=\"%Cred%h%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset\"",
-		"master..development",
-	)
-	cmd.Stdout = os.Stdout
-	cmd.Dir = owner + "/" + repo
-	_ = cmd.Run()
-}
-
-func getLatestVersion(registry, name string) (string, error) {
-	resp, err := http.Get(registry + "/" + name)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
