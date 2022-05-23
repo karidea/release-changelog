@@ -1,4 +1,4 @@
-module github.com/karidea/changelog
+module github.com/karidea/release-changelog
 
 go 1.16
 
