@@ -179,32 +179,10 @@ func main() {
 	bootstrapServers := os.Getenv("KAFKA_BOOTSTRAP_SERVERS")
 
 	if len(bootstrapServers) > 0 && len(kafkaTopic) > 0 {
-		c, errConsumer := kafka.NewConsumer(&kafka.ConfigMap{
-			"bootstrap.servers": bootstrapServers,
-			"group.id":          "release-changelog",
-			"auto.offset.reset": "latest",
-		})
-
-		if errConsumer != nil {
-			log.Fatal("Failed to create new consumer")
+		err := subscribeToKafkaForRepoMessage(bootstrapServers, kafkaTopic, repo)
+		if err != nil {
+			log.Fatal(err)
 		}
-
-		c.Subscribe(kafkaTopic, nil)
-
-		fmt.Println("Subscribed to " + kafkaTopic + "and waiting for message")
-		for {
-			msg, err := c.ReadMessage(-1)
-			if err == nil {
-				if strings.Contains(string(msg.Value), repo) {
-					fmt.Printf("\n%q\n", string(msg.Value))
-					fmt.Printf("%s has been published\n", repo)
-					break
-				}
-			}
-		}
-
-		c.Unsubscribe()
-		c.Close()
 	}
 
 	if len(tag) == 0 && len(repo) != 0 {
@@ -262,6 +240,36 @@ func main() {
 
 		os.Exit(0)
 	}
+}
+
+func subscribeToKafkaForRepoMessage(bootstrapServers, kafkaTopic, repo string) (error) {
+	c, err := kafka.NewConsumer(&kafka.ConfigMap{
+		"bootstrap.servers": bootstrapServers,
+		"group.id":          "release-changelog",
+		"auto.offset.reset": "latest",
+	})
+
+	if err != nil {
+		return err
+	}
+
+	c.Subscribe(kafkaTopic, nil)
+
+	fmt.Println("Subscribed to " + kafkaTopic + "and waiting for message")
+	for {
+		msg, err := c.ReadMessage(-1)
+		if err == nil {
+			if strings.Contains(string(msg.Value), repo) {
+				fmt.Printf("\n%q\n", string(msg.Value))
+				fmt.Printf("%s has been published\n", repo)
+				break
+			}
+		}
+	}
+
+	c.Unsubscribe()
+	c.Close()
+	return nil
 }
 
 func getLatestVersion(registry, name string) (string, error) {
