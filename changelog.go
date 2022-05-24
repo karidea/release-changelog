@@ -176,6 +176,7 @@ func main() {
 	}
 
 	githubToken := os.Getenv("GITHUB_TOKEN")
+	fmt.Println(githubToken)
 	bootstrapServers := os.Getenv("KAFKA_BOOTSTRAP_SERVERS")
 
 	if len(bootstrapServers) > 0 && len(kafkaTopic) > 0 {
