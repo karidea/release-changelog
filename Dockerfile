@@ -8,7 +8,7 @@ WORKDIR /build
 # libc-dev for stdio.h libraries
 RUN apk update && apk add --no-cache git gcc libc-dev
 
-COPY changelog.go .
+COPY release-changelog.go .
 COPY go.mod .
 COPY go.sum .
 
@@ -16,7 +16,7 @@ COPY go.sum .
 RUN go get -d -v
 
 # Build statically so all libaries are built into the binary.
-RUN go build -tags musl -ldflags="-extldflags=-static" changelog.go
+RUN go build -tags musl -ldflags="-extldflags=-static" release-changelog.go
 
 # Use scratch image to host the binary
 FROM scratch
@@ -26,7 +26,7 @@ ARG BOOTSTRAP_SERVERS
 ENV KAFKA_BOOTSTRAP_SERVERS=${BOOTSTRAP_SERVERS}
 
 # Copy our static executable.
-COPY --from=builder /build/changelog /
+COPY --from=builder /build/release-changelog /
 
-# Run the changelog binary.
-ENTRYPOINT ["/changelog"]
+# Run the release-changelog binary.
+ENTRYPOINT ["/release-changelog"]
