@@ -175,7 +175,7 @@ func main() {
 		log.Fatal("registry is a required parameter")
 	}
 
-	githubToken := os.Getenv("GITHUB_TOKEN")
+	githubToken := os.Getenv("TOKEN")
 	bootstrapServers := os.Getenv("KAFKA_BOOTSTRAP_SERVERS")
 
 	if len(bootstrapServers) > 0 && len(kafkaTopic) > 0 {
