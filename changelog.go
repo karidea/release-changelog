@@ -175,7 +175,7 @@ func main() {
 		log.Fatal("registry is a required parameter")
 	}
 
-	token := os.Getenv("TOKEN")
+	githubToken := os.Getenv("GITHUB_TOKEN")
 	bootstrapServers := os.Getenv("KAFKA_BOOTSTRAP_SERVERS")
 
 	if len(bootstrapServers) > 0 && len(kafkaTopic) > 0 {
@@ -186,7 +186,7 @@ func main() {
 	}
 
 	if len(tag) == 0 && len(repo) != 0 {
-		name, err := getNpmPackageName(token, owner, repo)
+		name, err := getNpmPackageName(githubToken, owner, repo)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -201,14 +201,14 @@ func main() {
 
 	var err error
 	if pr == 0 && len(repo) != 0 {
-		pr, err = getPullRequestNumber(token, owner, repo, commit)
+		pr, err = getPullRequestNumber(githubToken, owner, repo, commit)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	if pr > 0 {
-		repository, err := getRepositoryPullRequest(token, owner, repo, pr)
+		repository, err := getRepositoryPullRequest(githubToken, owner, repo, pr)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -229,7 +229,7 @@ func main() {
 		release := Release{TagName: tag, TargetCommitish: targetCommitish, Name: tag, Body: output}
 
 		if !dryRun {
-			err = publishRelease(token, owner, repo, release)
+			err = publishRelease(githubToken, owner, repo, release)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -304,7 +304,7 @@ func getLatestVersion(registry, name string) (string, error) {
 	return registryResponse.DistTags.Latest, nil
 }
 
-func getNpmPackageName(token, owner, repo string) (string, error) {
+func getNpmPackageName(githubToken, owner, repo string) (string, error) {
 	client := *graphql.NewClient(
 		"https://api.github.com/graphql",
 		graphql.WithHTTPClient(&http.Client{
@@ -316,7 +316,7 @@ func getNpmPackageName(token, owner, repo string) (string, error) {
 	request := graphql.NewRequest(NpmPackageJsonQuery)
 	request.Var("owner", owner)
 	request.Var("repo", repo)
-	request.Header.Add("Authorization", "bearer "+token)
+	request.Header.Add("Authorization", "bearer "+githubToken)
 
 	ctx := context.Background()
 
@@ -332,7 +332,7 @@ func getNpmPackageName(token, owner, repo string) (string, error) {
 	return packageJson.Name, nil
 }
 
-func getPullRequestNumber(token, owner, repo, commmit string) (int, error) {
+func getPullRequestNumber(githubToken, owner, repo, commmit string) (int, error) {
 	pr := 0
 	client := &http.Client{
 		Transport: &http.Transport{
@@ -345,7 +345,7 @@ func getPullRequestNumber(token, owner, repo, commmit string) (int, error) {
 		log.Fatal(err)
 	}
 	req.Header.Add("Accept", "application/vnd.github.groot-preview+json")
-	req.Header.Add("Authorization", "bearer "+token)
+	req.Header.Add("Authorization", "bearer "+githubToken)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -371,7 +371,7 @@ func getPullRequestNumber(token, owner, repo, commmit string) (int, error) {
 	return pr, nil
 }
 
-func getRepositoryPullRequest(token, owner, repo string, pr int) (Repository, error) {
+func getRepositoryPullRequest(githubToken, owner, repo string, pr int) (Repository, error) {
 	client := *graphql.NewClient(
 		"https://api.github.com/graphql",
 		graphql.WithHTTPClient(&http.Client{
@@ -384,7 +384,7 @@ func getRepositoryPullRequest(token, owner, repo string, pr int) (Repository, er
 	request.Var("owner", owner)
 	request.Var("repo", repo)
 	request.Var("pr", pr)
-	request.Header.Add("Authorization", "bearer "+token)
+	request.Header.Add("Authorization", "bearer "+githubToken)
 
 	ctx := context.Background()
 
@@ -396,7 +396,7 @@ func getRepositoryPullRequest(token, owner, repo string, pr int) (Repository, er
 	return respData.Repository, nil
 }
 
-func publishRelease(token, owner, repo string, release Release) error {
+func publishRelease(githubToken, owner, repo string, release Release) error {
 	client := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
@@ -412,7 +412,7 @@ func publishRelease(token, owner, repo string, release Release) error {
 		log.Fatal(err)
 	}
 	req.Header.Add("Accept", "application/vnd.github.v3+json")
-	req.Header.Add("Authorization", "bearer "+token)
+	req.Header.Add("Authorization", "bearer "+githubToken)
 
 	resp, err := client.Do(req)
 	if err != nil {
