@@ -344,7 +344,7 @@ func getPullRequestNumber(githubToken, owner, repo, commmit string) (int, error)
 	if err != nil {
 		log.Fatal(err)
 	}
-	req.Header.Add("Accept", "application/vnd.github.groot-preview+json")
+	req.Header.Add("Accept", "application/vnd.github.v3+json")
 	req.Header.Add("Authorization", "bearer "+githubToken)
 
 	resp, err := client.Do(req)
