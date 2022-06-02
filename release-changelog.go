@@ -117,6 +117,7 @@ type Release struct {
 	TargetCommitish string `json:"target_commitish"`
 	Name            string `json:"name"`
 	Body            string `json:"body"`
+	GenerateReleaseNotes bool `json:"generate_release_notes"`
 }
 
 type PR struct {
@@ -144,17 +145,21 @@ var pr int
 var commit string
 var dryRun bool
 var kafkaTopic string
+var generateReleaseNotes bool
+var packageName string
 
 func init() {
 	flag.StringVar(&repo, "repo", "", "Specify single Github repo to check (required)")
 	flag.StringVar(&owner, "owner", "", "Specify Github owner to check (required)")
 	flag.StringVar(&registry, "registry", "", "Specify npm registry (required)")
 	flag.StringVar(&tag, "tag", "", "Specify release tag name (e.g. v1.0.2)")
-	flag.StringVar(&targetCommitish, "targetRef", "", "Specify target ref oid to tag")
+	flag.StringVar(&targetCommitish, "target-ref", "", "Specify target ref oid to tag")
 	flag.IntVar(&pr, "pr", 0, "List a PRs commits")
 	flag.StringVar(&commit, "commit", "master", "Specify commit ref oid to base everything off of (default: master)")
 	flag.BoolVar(&dryRun, "dry-run", false, "Show what the release would look like w/o publishing")
 	flag.StringVar(&kafkaTopic, "kafka-topic", "", "Specify kafka topic to subscribe to")
+	flag.BoolVar(&generateReleaseNotes, "generate-release-notes", false, "Use github generated release notes (default: false)")
+	flag.StringVar(&packageName, "package-name", "", "Specify the npm package name to use")
 }
 
 func main() {
@@ -186,12 +191,17 @@ func main() {
 	}
 
 	if len(tag) == 0 && len(repo) != 0 {
-		name, err := getNpmPackageName(githubToken, owner, repo)
-		if err != nil {
-			log.Fatal(err)
+		npmPackageName := packageName
+		if len(packageName) == 0 {
+			name, err := getNpmPackageName(githubToken, owner, repo)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			npmPackageName = name
 		}
 
-		version, err := getLatestVersion(registry, name)
+		version, err := getLatestVersion(registry, npmPackageName)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -199,37 +209,50 @@ func main() {
 
 	}
 
+	if generateReleaseNotes {
+		fmt.Println("Generating release " + owner + "/" + repo + " - " + targetCommitish + ":" + tag)
+		release := Release{TagName: tag, TargetCommitish: targetCommitish, Name: tag, GenerateReleaseNotes: generateReleaseNotes}
+
+		if !dryRun {
+			err := publishRelease(githubToken, owner, repo, release)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		os.Exit(0)
+	}
+
 	var err error
 	if pr == 0 && len(repo) != 0 {
 		pr, err = getPullRequestNumber(githubToken, owner, repo, commit)
 		if err != nil {
-			log.Fatal(err)
-		}
+    		log.Fatal(err)
+    	}
 	}
 
 	if pr > 0 {
 		repository, err := getRepositoryPullRequest(githubToken, owner, repo, pr)
 		if err != nil {
-			log.Fatal(err)
-		}
+        		log.Fatal(err)
+        	}
 
 		var output string
 		for _, node := range repository.PullRequest.Commits.Nodes {
-			output += "* " + node.Commit.MessageHeadline + " @" + node.Commit.Author.User.Login + "\n"
-		}
+        		output += "* " + node.Commit.MessageHeadline + " @" + node.Commit.Author.User.Login + "\n"
+        	}
 
 		if tag == "" {
-			log.Fatal("Need to provide tag to publish release")
-		}
+        		log.Fatal("Need to provide tag to publish release")
+        	}
 
 		if targetCommitish == "" {
-			targetCommitish = repository.PullRequest.BaseRefName
-		}
+        		targetCommitish = repository.PullRequest.BaseRefName
+        	}
 
-		release := Release{TagName: tag, TargetCommitish: targetCommitish, Name: tag, Body: output}
+		release := Release{TagName: tag, TargetCommitish: targetCommitish, Name: tag, Body: output, GenerateReleaseNotes: false}
 
 		if !dryRun {
-			err = publishRelease(githubToken, owner, repo, release)
+			err := publishRelease(githubToken, owner, repo, release)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -392,6 +415,7 @@ func getRepositoryPullRequest(githubToken, owner, repo string, pr int) (Reposito
 	if err := client.Run(ctx, request, &respData); err != nil {
 		return Repository{}, err
 	}
+
 
 	return respData.Repository, nil
 }
