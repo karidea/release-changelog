@@ -173,8 +173,17 @@ func main() {
 	githubToken := os.Getenv("GITHUB_TOKEN")
 	bootstrapServers := os.Getenv("KAFKA_BOOTSTRAP_SERVERS")
 
+	repository := owner + "/" + repo
+	if len(owner) == 0 && len(repo) == 0 {
+		repository = os.Getenv("GITHUB_REPOSITORY")
+		if len(repository) == 0 {
+			log.Fatal("Unable to read GITHUB_REPOSITORY")
+		}
+	}
+
 	if len(bootstrapServers) > 0 && len(kafkaTopic) > 0 {
-		err := subscribeToKafkaForRepoMessage(bootstrapServers, kafkaTopic, repo)
+		query := strings.Split(repository, "/")[1]
+		err := subscribeToKafkaForQueryMessage(bootstrapServers, kafkaTopic, query)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -201,14 +210,6 @@ func main() {
 	if generateReleaseNotes {
 		if len(targetCommitish) == 0 {
 			targetCommitish = "master"
-		}
-
-		repository := owner + "/" + repo
-		if len(owner) == 0 || len(repo) == 0 {
-			repository = os.Getenv("GITHUB_REPOSITORY")
-			if len(repository) == 0 {
-				log.Fatal("Unable to read GITHUB_REPOSITORY")
-			}
 		}
 		fmt.Println("Generating release " + repository + " - " + targetCommitish + ":" + tag)
 		release := Release{TagName: tag, TargetCommitish: targetCommitish, Name: tag, GenerateReleaseNotes: generateReleaseNotes}
@@ -265,7 +266,7 @@ func main() {
 	}
 }
 
-func subscribeToKafkaForRepoMessage(bootstrapServers, kafkaTopic, repo string) (error) {
+func subscribeToKafkaForQueryMessage(bootstrapServers, kafkaTopic, query string) (error) {
 	c, err := kafka.NewConsumer(&kafka.ConfigMap{
 		"bootstrap.servers": bootstrapServers,
 		"group.id":          "release-changelog",
@@ -282,9 +283,9 @@ func subscribeToKafkaForRepoMessage(bootstrapServers, kafkaTopic, repo string) (
 	for {
 		msg, err := c.ReadMessage(-1)
 		if err == nil {
-			if strings.Contains(string(msg.Value), repo) {
+			if strings.Contains(string(msg.Value), query) {
 				fmt.Printf("\n%q\n", string(msg.Value))
-				fmt.Printf("%s has been published\n", repo)
+				fmt.Printf("%s has been published\n", query)
 				break
 			}
 		}
