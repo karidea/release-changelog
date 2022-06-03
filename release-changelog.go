@@ -149,8 +149,8 @@ var generateReleaseNotes bool
 var packageName string
 
 func init() {
-	flag.StringVar(&repo, "repo", "", "Specify single Github repo to check (required)")
-	flag.StringVar(&owner, "owner", "", "Specify Github owner to check (required)")
+	flag.StringVar(&repo, "repo", "", "Specify single Github repo to check")
+	flag.StringVar(&owner, "owner", "", "Specify Github owner to check")
 	flag.StringVar(&registry, "registry", "", "Specify npm registry (required)")
 	flag.StringVar(&tag, "tag", "", "Specify release tag name (e.g. v1.0.2)")
 	flag.StringVar(&targetCommitish, "target-ref", "", "Specify target ref oid to tag")
@@ -180,28 +180,27 @@ func main() {
 		}
 	}
 
-	if len(tag) == 0 && len(repo) != 0 {
-		npmPackageName := packageName
-		if len(packageName) == 0 {
-			name, err := getNpmPackageName(githubToken, owner, repo)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			npmPackageName = name
+	npmPackageName := packageName
+	if len(packageName) == 0 {
+		name, err := getNpmPackageName(githubToken, owner, repo)
+		if err != nil {
+			log.Fatal(err)
 		}
 
+		npmPackageName = name
+	}
+
+	if len(tag) == 0 {
 		version, err := getLatestVersion(registry, npmPackageName)
 		if err != nil {
 			log.Fatal(err)
 		}
 		tag = "v" + version
-
 	}
 
 	if generateReleaseNotes {
 		if len(targetCommitish) == 0 {
-			log.Fatal("target-ref is a required parameter for generating release notes")
+			targetCommitish = "master"
 		}
 
 		repository := owner + "/" + repo
