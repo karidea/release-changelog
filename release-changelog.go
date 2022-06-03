@@ -165,22 +165,12 @@ func init() {
 func main() {
 	flag.Parse()
 
-	if len(repo) == 0 {
-		flag.Usage()
-		log.Fatal("repo is a required parameter")
-	}
-
-	if len(owner) == 0 {
-		flag.Usage()
-		log.Fatal("owner is a required parameter")
-	}
-
 	if len(registry) == 0 {
 		flag.Usage()
 		log.Fatal("registry is a required parameter")
 	}
 
-	githubToken := os.Getenv("TOKEN")
+	githubToken := os.Getenv("GITHUB_TOKEN")
 	bootstrapServers := os.Getenv("KAFKA_BOOTSTRAP_SERVERS")
 
 	if len(bootstrapServers) > 0 && len(kafkaTopic) > 0 {
@@ -210,11 +200,22 @@ func main() {
 	}
 
 	if generateReleaseNotes {
-		fmt.Println("Generating release " + owner + "/" + repo + " - " + targetCommitish + ":" + tag)
+		if len(targetCommitish) == 0 {
+			log.Fatal("target-ref is a required parameter for generating release notes")
+		}
+
+		repository := owner + "/" + repo
+		if len(owner) == 0 || len(repo) == 0 {
+			repository = os.Getenv("GITHUB_REPOSITORY")
+			if len(repository) == 0 {
+				log.Fatal("Unable to read GITHUB_REPOSITORY")
+			}
+		}
+		fmt.Println("Generating release " + repository + " - " + targetCommitish + ":" + tag)
 		release := Release{TagName: tag, TargetCommitish: targetCommitish, Name: tag, GenerateReleaseNotes: generateReleaseNotes}
 
 		if !dryRun {
-			err := publishRelease(githubToken, owner, repo, release)
+			err := publishRelease(githubToken, repository, release)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -252,7 +253,7 @@ func main() {
 		release := Release{TagName: tag, TargetCommitish: targetCommitish, Name: tag, Body: output, GenerateReleaseNotes: false}
 
 		if !dryRun {
-			err := publishRelease(githubToken, owner, repo, release)
+			err := publishRelease(githubToken, owner + "/" + repo, release)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -420,13 +421,13 @@ func getRepositoryPullRequest(githubToken, owner, repo string, pr int) (Reposito
 	return respData.Repository, nil
 }
 
-func publishRelease(githubToken, owner, repo string, release Release) error {
+func publishRelease(githubToken, repository string, release Release) error {
 	client := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
 			}}}
-	url := "https://api.github.com/repos/" + owner + "/" + repo + "/releases"
+	url := "https://api.github.com/repos/" + repository + "/releases"
 	requestBody, err := json.Marshal(release)
 	if err != nil {
 		return err
