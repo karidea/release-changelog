@@ -279,7 +279,7 @@ func subscribeToKafkaForQueryMessage(bootstrapServers, kafkaTopic, query string)
 
 	c.Subscribe(kafkaTopic, nil)
 
-	fmt.Println("Subscribed to " + kafkaTopic + "and waiting for message")
+	fmt.Println("Subscribed to " + kafkaTopic + " and waiting for message")
 	for {
 		msg, err := c.ReadMessage(-1)
 		if err == nil {
