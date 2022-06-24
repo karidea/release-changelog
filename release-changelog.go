@@ -166,8 +166,11 @@ func main() {
 	flag.Parse()
 
 	if len(registry) == 0 {
-		flag.Usage()
-		log.Fatal("registry is a required parameter")
+		registry = os.Getenv("NPM_REGISTRY")
+		if len(registry) == 0 {
+			flag.Usage()
+			log.Fatal("registry is a required parameter")
+		}
 	}
 
 	githubToken := os.Getenv("GITHUB_TOKEN")
